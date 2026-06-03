@@ -30,15 +30,15 @@ FPS  = 60
 # ─── Layout — vertical stacking (A above B) ───────────────────────────────────
 PAD_SIDE    = 110
 
-A_HEADER_H  = 195
-A_CHART_H   = 440
+A_HEADER_H  = 230
+A_CHART_H   = 420
 VS_H        = 110
-B_HEADER_H  = 195
-B_CHART_H   = 440
+B_HEADER_H  = 230
+B_CHART_H   = 420
 
 # Center content vertically — PAD_TOP = PAD_BOT automatically
-_CONTENT_H  = A_HEADER_H + A_CHART_H + VS_H + B_HEADER_H + B_CHART_H  # 1380
-PAD_TOP     = (H - _CONTENT_H) // 2                                     # 270
+_CONTENT_H  = A_HEADER_H + A_CHART_H + VS_H + B_HEADER_H + B_CHART_H  # 1410
+PAD_TOP     = (H - _CONTENT_H) // 2                                     # 255
 
 # Derived Y positions
 A_HEADER_Y  = PAD_TOP
@@ -60,7 +60,8 @@ BAR_MAX_FRAC = 0.58
 BG        = (4,   4,  12)            # deep navy-black
 COLOR_A   = (0,  255, 140)           # vivid mint green
 COLOR_B   = (255,  60,  90)          # vivid coral-red
-COLOR_SUB = (58,  62,  92)           # muted blue-gray
+COLOR_SUB  = (58,  62,  92)          # muted blue-gray
+COLOR_DESC = (72,  76, 108)          # lighter — algorithm description
 COLOR_DIV = (22,  22,  44)           # subtle blue-tinted line
 
 HUE_A = 148.0
@@ -147,13 +148,13 @@ def _draw_bars(draw: ImageDraw.Draw, array: list, active: set,
         draw.rounded_rectangle([(bx1, y_bot - bh), (bx2, y_bot)], radius=3, fill=color)
 
 
-def _draw_algo_header(draw: ImageDraw.Draw, y: int, name: str, comp: int,
+def _draw_algo_header(draw: ImageDraw.Draw, y: int, name: str, desc: str, comp: int,
                       color: tuple, leading: bool, done: bool, winner: str) -> None:
     cx = W // 2
     slug = name.lower().replace(" ", "_")
     max_w = CHART_X2 - CHART_X1
 
-    # Shrink font until name fits within the chart width
+    # Shrink font until name fits
     name_size = 92
     while name_size > 36:
         bb = draw.textbbox((0, 0), slug, font=_font(name_size))
@@ -161,21 +162,35 @@ def _draw_algo_header(draw: ImageDraw.Draw, y: int, name: str, comp: int,
             break
         name_size -= 4
 
-    ops_size = max(38, int(name_size * 0.60))
-    line2_y = y + 14 + name_size
+    ops_size  = max(28, int(name_size * 0.46))   # smaller than before
+    desc_size = max(24, int(name_size * 0.36))
+    name_y    = y + 8
+    ops_y     = name_y + name_size + 10
+    desc_y    = ops_y + ops_size + 8
 
-    _centered(draw, cx, y + 10, slug, _font(name_size), color)
+    _centered(draw, cx, name_y, slug, _font(name_size), color)
+
+    if leading:
+        bb = draw.textbbox((0, 0), slug, font=_font(name_size))
+        nw = bb[2] - bb[0]
+        ux = cx - nw // 2
+        draw.rounded_rectangle([(ux, name_y + name_size + 2), (ux + nw, name_y + name_size + 5)], radius=2, fill=color)
 
     if done:
         label = "[ winner ]" if winner == name else "[ sorted ]"
-        _centered(draw, cx, line2_y, label, _font(ops_size, bold=False), color)
+        _centered(draw, cx, ops_y, label, _font(ops_size, bold=False), color)
     else:
-        if leading:
-            bb = draw.textbbox((0, 0), slug, font=_font(name_size))
-            nw = bb[2] - bb[0]
-            ux = cx - nw // 2
-            draw.rounded_rectangle([(ux, y + 8 + name_size), (ux + nw, y + 12 + name_size)], radius=2, fill=color)
-        _centered(draw, cx, line2_y, f"{comp:,} ops", _font(ops_size, bold=False), color)
+        _centered(draw, cx, ops_y, f"{comp:,} ops", _font(ops_size, bold=False), color)
+
+    # One-line description — shrink font until it fits
+    if desc:
+        short = desc if len(desc) <= 60 else desc[:57] + "..."
+        while desc_size > 18:
+            bb = draw.textbbox((0, 0), short, font=_font(desc_size, bold=False))
+            if (bb[2] - bb[0]) <= max_w:
+                break
+            desc_size -= 2
+        _centered(draw, cx, desc_y, short, _font(desc_size, bold=False), COLOR_DESC)
 
 
 # ─── Frame renderer ───────────────────────────────────────────────────────────
@@ -186,6 +201,7 @@ def render_frame(
     name_a: str, name_b: str,
     progress_a: float, progress_b: float,
     winner: Optional[str] = None,
+    desc_a: str = "", desc_b: str = "",
 ) -> Image.Image:
 
     img  = Image.new("RGB", (W, H), BG)
@@ -195,14 +211,14 @@ def render_frame(
     leading_b = (not done_a and not done_b and progress_b > progress_a) or (done_b and not done_a)
 
     # ── Algo A header ─────────────────────────────────────────────────────────
-    _draw_algo_header(draw, A_HEADER_Y, name_a, comp_a, COLOR_A, leading_a, done_a, winner or "")
+    _draw_algo_header(draw, A_HEADER_Y, name_a, desc_a, comp_a, COLOR_A, leading_a, done_a, winner or "")
 
     # ── Algo A bars ───────────────────────────────────────────────────────────
     _draw_bars(draw, arr_a, set(active_a), HUE_A, CHART_X1, CHART_X2, A_CHART_Y, A_CHART_BOT)
 
     # ── VS divider — lines + circle badge ────────────────────────────────────
     mid_y  = VS_Y + VS_H // 2
-    cr     = 38                                  # circle radius
+    cr     = 38
     cx_vs  = W // 2
     draw.rectangle([(CHART_X1, mid_y - 1), (cx_vs - cr - 10, mid_y + 1)], fill=COLOR_DIV)
     draw.rectangle([(cx_vs + cr + 10, mid_y - 1), (CHART_X2, mid_y + 1)], fill=COLOR_DIV)
@@ -210,7 +226,7 @@ def render_frame(
     _centered(draw, cx_vs, mid_y - 22, "vs", _font(38, bold=False), COLOR_SUB)
 
     # ── Algo B header ─────────────────────────────────────────────────────────
-    _draw_algo_header(draw, B_HEADER_Y, name_b, comp_b, COLOR_B, leading_b, done_b, winner or "")
+    _draw_algo_header(draw, B_HEADER_Y, name_b, desc_b, comp_b, COLOR_B, leading_b, done_b, winner or "")
 
     # ── Algo B bars ───────────────────────────────────────────────────────────
     _draw_bars(draw, arr_b, set(active_b), HUE_B, CHART_X1, CHART_X2, B_CHART_Y, B_CHART_BOT)
@@ -300,6 +316,8 @@ def render_video(
                 name_a=algo_a["name"], name_b=algo_b["name"],
                 progress_a=prog_a, progress_b=prog_b,
                 winner=winner,
+                desc_a=algo_a.get("description", ""),
+                desc_b=algo_b.get("description", ""),
             )
             proc.stdin.write(np.array(frame).tobytes())
 
@@ -352,6 +370,8 @@ def render_preview(
         progress_a=min(idx / max(len(states_a) - 1, 1), 1.0),
         progress_b=min(idx / max(len(states_b) - 1, 1), 1.0),
         winner=winner if (done_a or done_b) else None,
+        desc_a=algo_a.get("description", ""),
+        desc_b=algo_b.get("description", ""),
     )
     frame.save(output_path)
     print(f"Preview saved: {output_path}")
