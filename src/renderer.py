@@ -254,7 +254,7 @@ def render_video(
     # Add 3 second celebration hold
     total_frames = total + FPS * 3
 
-    print(f"Rendering {total_frames} frames ({total_frames / FPS:.1f}s) → {output_path}")
+    print(f"Rendering {total_frames} frames ({total_frames / FPS:.1f}s) -> {output_path}")
 
     cmd = [
         "ffmpeg", "-y",
