@@ -151,19 +151,31 @@ def _draw_algo_header(draw: ImageDraw.Draw, y: int, name: str, comp: int,
                       color: tuple, leading: bool, done: bool, winner: str) -> None:
     cx = W // 2
     slug = name.lower().replace(" ", "_")
+    max_w = CHART_X2 - CHART_X1
 
-    _centered(draw, cx, y + 8, slug, _font(92), color)
+    # Shrink font until name fits within the chart width
+    name_size = 92
+    while name_size > 36:
+        bb = draw.textbbox((0, 0), slug, font=_font(name_size))
+        if (bb[2] - bb[0]) <= max_w:
+            break
+        name_size -= 4
+
+    ops_size = max(38, int(name_size * 0.60))
+    line2_y = y + 14 + name_size
+
+    _centered(draw, cx, y + 10, slug, _font(name_size), color)
 
     if done:
         label = "[ winner ]" if winner == name else "[ sorted ]"
-        _centered(draw, cx, y + 124, label, _font(52, bold=False), color)
+        _centered(draw, cx, line2_y, label, _font(ops_size, bold=False), color)
     else:
-        _centered(draw, cx, y + 124, f"{comp:,} ops", _font(58, bold=False), color)
         if leading:
-            bb = draw.textbbox((0, 0), slug, font=_font(92))
+            bb = draw.textbbox((0, 0), slug, font=_font(name_size))
             nw = bb[2] - bb[0]
             ux = cx - nw // 2
-            draw.rounded_rectangle([(ux, y + 110), (ux + nw, y + 115)], radius=2, fill=color)
+            draw.rounded_rectangle([(ux, y + 8 + name_size), (ux + nw, y + 12 + name_size)], radius=2, fill=color)
+        _centered(draw, cx, line2_y, f"{comp:,} ops", _font(ops_size, bold=False), color)
 
 
 # ─── Frame renderer ───────────────────────────────────────────────────────────
