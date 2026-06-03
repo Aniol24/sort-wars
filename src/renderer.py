@@ -27,17 +27,32 @@ load_dotenv()
 W, H = 1080, 1920
 FPS  = 60
 
-# ─── Layout (pixels) ──────────────────────────────────────────────────────────
-HEADER_H     = 160                    # title only
-NAMES_H      = 160                    # algo names + leading indicator
-CHART_TOP    = HEADER_H + NAMES_H     # 320
-CHART_BOTTOM = 1700
-STATS_TOP    = CHART_BOTTOM
-STATS_H      = H - STATS_TOP          # 220
+# ─── Layout — vertical stacking (A above B) ───────────────────────────────────
+TITLE_H     = 110
 
-L_X1, L_X2  = 10,  528               # left panel
-DIV_X1, DIV_X2 = 528, 552            # divider (24px)
-R_X1, R_X2  = 552, 1070              # right panel
+A_HEADER_H  = 200
+A_CHART_H   = 570
+
+VS_H        = 120
+
+B_HEADER_H  = 200
+B_CHART_H   = 570
+
+# Derived Y positions
+A_HEADER_Y  = TITLE_H                      # 110
+A_CHART_Y   = A_HEADER_Y + A_HEADER_H      # 310
+A_CHART_BOT = A_CHART_Y + A_CHART_H        # 880
+
+VS_Y        = A_CHART_BOT                   # 880
+VS_BOT      = VS_Y + VS_H                   # 1000
+
+B_HEADER_Y  = VS_BOT                        # 1000
+B_CHART_Y   = B_HEADER_Y + B_HEADER_H      # 1200
+B_CHART_BOT = B_CHART_Y + B_CHART_H        # 1770
+# bottom margin: 1920 - 1770 = 150px
+
+CHART_X1, CHART_X2 = 24, 1056              # full-width panels
+BAR_MAX_FRAC = 0.65                         # bars cap at 65% of panel height
 
 # ─── Palette ──────────────────────────────────────────────────────────────────
 BG           = (5,   5,   8)
@@ -111,7 +126,7 @@ def _draw_bars(draw: ImageDraw.Draw, array: list, active: set,
     if max_v == 0:
         max_v = 1
     cw = x2 - x1
-    ch = y_bot - y_top
+    ch = int((y_bot - y_top) * BAR_MAX_FRAC)   # cap bar height
     bw = cw / n
 
     for i, v in enumerate(array):
@@ -122,10 +137,23 @@ def _draw_bars(draw: ImageDraw.Draw, array: list, active: set,
         draw.rectangle([(bx1, y_bot - bh), (bx2, y_bot)], fill=color)
 
 
-def _draw_stats(draw: ImageDraw.Draw, cx: int, y: int,
-                color: tuple, comp: int) -> None:
-    _centered(draw, cx, y, f"{comp:,}", _font(96), color)
-    _centered(draw, cx, y + 110, "ops", _font(36, bold=False), COLOR_SUB)
+def _draw_algo_header(draw: ImageDraw.Draw, y: int, name: str, comp: int,
+                      color: tuple, leading: bool, done: bool, winner: str) -> None:
+    cx = W // 2
+    slug = name.lower().replace(" ", "_")
+
+    _centered(draw, cx, y + 10, slug, _font(74), color)
+
+    if done:
+        label = "[ winner ]" if winner == name else "[ sorted ]"
+        _centered(draw, cx, y + 110, label, _font(44, bold=False), color)
+    else:
+        _centered(draw, cx, y + 110, f"{comp:,} ops", _font(50, bold=False), color)
+        if leading:
+            bb = draw.textbbox((0, 0), slug, font=_font(74))
+            nw = bb[2] - bb[0]
+            ux = cx - nw // 2
+            draw.rounded_rectangle([(ux, y + 94), (ux + nw, y + 99)], radius=2, fill=color)
 
 
 # ─── Frame renderer ───────────────────────────────────────────────────────────
@@ -144,57 +172,26 @@ def render_frame(
     leading_a = (not done_a and not done_b and progress_a > progress_b) or (done_a and not done_b)
     leading_b = (not done_a and not done_b and progress_b > progress_a) or (done_b and not done_a)
 
-    # ── Header ────────────────────────────────────────────────────────────────
-    _centered(draw, W // 2, 38, "sort_wars", _font(82), COLOR_TITLE)
+    # ── Title ─────────────────────────────────────────────────────────────────
+    _centered(draw, W // 2, 28, "sort_wars", _font(68, bold=False), COLOR_SUB)
 
-    # ── Name plates ───────────────────────────────────────────────────────────
-    cx_a = (L_X1 + L_X2) // 2
-    cx_b = (R_X1 + R_X2) // 2
-    name_y = HEADER_H + 20
+    # ── Algo A header ─────────────────────────────────────────────────────────
+    _draw_algo_header(draw, A_HEADER_Y, name_a, comp_a, COLOR_A, leading_a, done_a, winner or "")
 
-    slug_a = name_a.lower().replace(" ", "_")
-    slug_b = name_b.lower().replace(" ", "_")
+    # ── Algo A bars ───────────────────────────────────────────────────────────
+    _draw_bars(draw, arr_a, set(active_a), HUE_A, CHART_X1, CHART_X2, A_CHART_Y, A_CHART_BOT)
 
-    _centered(draw, cx_a, name_y, slug_a, _font(50), COLOR_A)
-    _centered(draw, cx_b, name_y, slug_b, _font(50), COLOR_B)
-    _centered(draw, W // 2, name_y + 16, "vs", _font(32, bold=False), COLOR_SUB)
+    # ── VS divider ────────────────────────────────────────────────────────────
+    mid_y = VS_Y + VS_H // 2
+    draw.rectangle([(40, mid_y - 1), (W // 2 - 70, mid_y + 1)], fill=COLOR_DIV)
+    draw.rectangle([(W // 2 + 70, mid_y - 1), (W - 40, mid_y + 1)], fill=COLOR_DIV)
+    _centered(draw, W // 2, mid_y - 30, "vs", _font(52, bold=False), COLOR_SUB)
 
-    # Winning indicator — thin underline under leading name
-    lead_y = name_y + 76
-    for cx, slug, leading, color in [
-        (cx_a, slug_a, leading_a, COLOR_A),
-        (cx_b, slug_b, leading_b, COLOR_B),
-    ]:
-        if leading:
-            bb = draw.textbbox((0, 0), slug, font=_font(50))
-            nw = bb[2] - bb[0]
-            ux = cx - nw // 2
-            draw.rounded_rectangle([(ux, lead_y), (ux + nw, lead_y + 5)], radius=2, fill=color)
-            _centered(draw, cx, lead_y + 14, "winning", _font(28, bold=False), color)
+    # ── Algo B header ─────────────────────────────────────────────────────────
+    _draw_algo_header(draw, B_HEADER_Y, name_b, comp_b, COLOR_B, leading_b, done_b, winner or "")
 
-    # ── Divider ───────────────────────────────────────────────────────────────
-    draw.rectangle([(DIV_X1, CHART_TOP), (DIV_X2, CHART_BOTTOM)], fill=COLOR_DIV)
-
-    # ── Bar charts ────────────────────────────────────────────────────────────
-    _draw_bars(draw, arr_a, set(active_a), HUE_A, L_X1 + 4, L_X2 - 4, CHART_TOP + 4, CHART_BOTTOM - 4)
-    _draw_bars(draw, arr_b, set(active_b), HUE_B, R_X1 + 4, R_X2 - 4, CHART_TOP + 4, CHART_BOTTOM - 4)
-
-    # ── Status banners ────────────────────────────────────────────────────────
-    if done_a:
-        label = "winner" if winner == name_a else "sorted"
-        clr   = COLOR_A
-        _centered(draw, (L_X1 + L_X2) // 2, CHART_TOP + 14, label, _font(46, bold=False), clr)
-    if done_b:
-        label = "winner" if winner == name_b else "sorted"
-        clr   = COLOR_B
-        _centered(draw, (R_X1 + R_X2) // 2, CHART_TOP + 14, label, _font(46, bold=False), clr)
-
-    # ── Stats panel ───────────────────────────────────────────────────────────
-    draw.rectangle([(0, STATS_TOP), (W, STATS_TOP + 2)], fill=COLOR_DIV)
-
-    stats_y = STATS_TOP + 26
-    _draw_stats(draw, (L_X1 + L_X2) // 2, stats_y, COLOR_A, comp_a)
-    _draw_stats(draw, (R_X1 + R_X2) // 2, stats_y, COLOR_B, comp_b)
+    # ── Algo B bars ───────────────────────────────────────────────────────────
+    _draw_bars(draw, arr_b, set(active_b), HUE_B, CHART_X1, CHART_X2, B_CHART_Y, B_CHART_BOT)
 
     return img
 
