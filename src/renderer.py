@@ -162,8 +162,8 @@ def _draw_algo_header(draw: ImageDraw.Draw, y: int, name: str, desc: str, comp: 
             break
         name_size -= 4
 
-    ops_size  = max(28, int(name_size * 0.46))   # smaller than before
-    desc_size = max(24, int(name_size * 0.36))
+    ops_size  = max(24, int(name_size * 0.38))
+    desc_size = max(20, int(name_size * 0.28))
     name_y    = y + 8
     ops_y     = name_y + name_size + 10
     desc_y    = ops_y + ops_size + 8
