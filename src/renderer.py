@@ -28,27 +28,27 @@ W, H = 1080, 1920
 FPS  = 60
 
 # ─── Layout (pixels) ──────────────────────────────────────────────────────────
-HEADER_H     = 210
-NAMES_H      = 110
+HEADER_H     = 160                    # title only
+NAMES_H      = 160                    # algo names + leading indicator
 CHART_TOP    = HEADER_H + NAMES_H     # 320
-CHART_BOTTOM = 1610
+CHART_BOTTOM = 1700
 STATS_TOP    = CHART_BOTTOM
-STATS_H      = H - STATS_TOP          # 310
+STATS_H      = H - STATS_TOP          # 220
 
-L_X1, L_X2  = 20,  520               # left panel  (500px wide)
-DIV_X1, DIV_X2 = 520, 560            # divider     (40px)
-R_X1, R_X2  = 560, 1060              # right panel (500px wide)
+L_X1, L_X2  = 10,  528               # left panel
+DIV_X1, DIV_X2 = 528, 552            # divider (24px)
+R_X1, R_X2  = 552, 1070              # right panel
 
 # ─── Palette ──────────────────────────────────────────────────────────────────
 BG          = (6,  6,  14)
-HEADER_BG   = (10, 10, 24)
+HEADER_BG   = (6,  6,  14)           # unified dark, no header box
 COLOR_A     = (0,  230, 255)          # cyan  — algorithm A
 COLOR_B     = (255, 45, 120)          # pink  — algorithm B
 COLOR_ACTIVE = (255, 255, 200)        # warm white — highlighted bars
 COLOR_GOLD  = (255, 200, 0)
 COLOR_TEXT  = (200, 215, 240)
-COLOR_SUB   = (100, 115, 145)
-COLOR_DIV   = (35,  35,  65)
+COLOR_SUB   = (70, 80, 110)
+COLOR_DIV   = (28, 28, 52)
 
 HUE_A = 185.0   # cyan hue
 HUE_B = 330.0   # pink hue
@@ -121,33 +121,10 @@ def _draw_bars(draw: ImageDraw.Draw, array: list, active: set,
 
 
 def _draw_stats(draw: ImageDraw.Draw, cx: int, y: int,
-                color: tuple, comp: int, swaps: int,
-                progress: float, leading: bool) -> None:
-    # Leading badge
-    if leading:
-        badge_text = "LEADING"
-        bb = draw.textbbox((0, 0), badge_text, font=_font(28))
-        bw = bb[2] - bb[0] + 24
-        bx = cx - bw // 2
-        draw.rounded_rectangle([(bx, y), (bx + bw, y + 38)], radius=8, fill=color)
-        _centered(draw, cx, y + 5, badge_text, _font(28), BG)
-        y += 48
-
-    # Comparison count
-    draw.text((cx - 220, y), "COMPARISONS", font=_font(24, bold=False), fill=COLOR_SUB)
-    draw.text((cx - 220, y + 28), f"{comp:,}", font=_font(58), fill=color)
-
-    # Swaps count
-    draw.text((cx - 220, y + 100), "SWAPS", font=_font(24, bold=False), fill=COLOR_SUB)
-    draw.text((cx - 220, y + 128), f"{swaps:,}", font=_font(48), fill=color)
-
-    # Progress bar
-    bar_y = y + 188
-    bx1, bx2 = cx - 220, cx + 220
-    draw.rounded_rectangle([(bx1, bar_y), (bx2, bar_y + 10)], radius=5, fill=(25, 25, 45))
-    filled = int((bx2 - bx1) * min(progress, 1.0))
-    if filled > 2:
-        draw.rounded_rectangle([(bx1, bar_y), (bx1 + filled, bar_y + 10)], radius=5, fill=color)
+                color: tuple, comp: int, leading: bool) -> None:
+    num_text = f"{comp:,}"
+    _centered(draw, cx, y, num_text, _font(96), color)
+    _centered(draw, cx, y + 108, "comparisons", _font(34, bold=False), COLOR_SUB)
 
 
 # ─── Frame renderer ───────────────────────────────────────────────────────────
@@ -167,16 +144,28 @@ def render_frame(
     leading_b = (not done_a and not done_b and progress_b > progress_a) or (done_b and not done_a)
 
     # ── Header ────────────────────────────────────────────────────────────────
-    draw.rectangle([(0, 0), (W, HEADER_H)], fill=HEADER_BG)
-    _centered(draw, W // 2, 28,  "SORT  WARS",      _font(72),         COLOR_GOLD)
-    _centered(draw, W // 2, 118, "ALGORITHM  DUEL", _font(34, bold=False), COLOR_SUB)
-    draw.rectangle([(0, HEADER_H - 3), (W, HEADER_H)], fill=COLOR_GOLD)
+    _centered(draw, W // 2, 36, "SORT WARS", _font(88), COLOR_GOLD)
 
     # ── Name plates ───────────────────────────────────────────────────────────
-    name_cy = HEADER_H + 28
-    _centered(draw, (L_X1 + L_X2) // 2, name_cy, name_a.upper(), _font(40), COLOR_A)
-    _centered(draw, (R_X1 + R_X2) // 2, name_cy, name_b.upper(), _font(40), COLOR_B)
-    _centered(draw, W // 2,              name_cy + 10, "VS",       _font(46), COLOR_TEXT)
+    cx_a = (L_X1 + L_X2) // 2
+    cx_b = (R_X1 + R_X2) // 2
+    name_y = HEADER_H + 18
+
+    # Algorithm names
+    _centered(draw, cx_a, name_y, name_a.upper(), _font(52), COLOR_A)
+    _centered(draw, cx_b, name_y, name_b.upper(), _font(52), COLOR_B)
+    _centered(draw, W // 2, name_y + 14, "VS", _font(36, bold=False), COLOR_SUB)
+
+    # Leading indicator — small pill under the name
+    pill_y = name_y + 78
+    for cx, leading, color in [(cx_a, leading_a, COLOR_A), (cx_b, leading_b, COLOR_B)]:
+        if leading:
+            label = "WINNING"
+            bb = draw.textbbox((0, 0), label, font=_font(30))
+            bw = bb[2] - bb[0] + 28
+            bx = cx - bw // 2
+            draw.rounded_rectangle([(bx, pill_y), (bx + bw, pill_y + 44)], radius=10, fill=color)
+            _centered(draw, cx, pill_y + 7, label, _font(30), BG)
 
     # ── Divider ───────────────────────────────────────────────────────────────
     draw.rectangle([(DIV_X1, CHART_TOP), (DIV_X2, CHART_BOTTOM)], fill=COLOR_DIV)
@@ -196,13 +185,11 @@ def render_frame(
         _centered(draw, (R_X1 + R_X2) // 2, CHART_TOP + 14, label, _font(50), clr)
 
     # ── Stats panel ───────────────────────────────────────────────────────────
-    draw.rectangle([(0, STATS_TOP), (W, H)], fill=(9, 9, 22))
     draw.rectangle([(0, STATS_TOP), (W, STATS_TOP + 2)], fill=COLOR_DIV)
-    draw.rectangle([(W // 2 - 1, STATS_TOP + 12), (W // 2 + 1, H - 12)], fill=COLOR_DIV)
 
-    stats_y = STATS_TOP + 16
-    _draw_stats(draw, (L_X1 + L_X2) // 2, stats_y, COLOR_A, comp_a, swaps_a, progress_a, leading_a)
-    _draw_stats(draw, (R_X1 + R_X2) // 2, stats_y, COLOR_B, comp_b, swaps_b, progress_b, leading_b)
+    stats_y = STATS_TOP + 22
+    _draw_stats(draw, (L_X1 + L_X2) // 2, stats_y, COLOR_A, comp_a, leading_a)
+    _draw_stats(draw, (R_X1 + R_X2) // 2, stats_y, COLOR_B, comp_b, leading_b)
 
     return img
 
