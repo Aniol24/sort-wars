@@ -40,30 +40,32 @@ DIV_X1, DIV_X2 = 528, 552            # divider (24px)
 R_X1, R_X2  = 552, 1070              # right panel
 
 # ─── Palette ──────────────────────────────────────────────────────────────────
-BG          = (6,  6,  14)
-HEADER_BG   = (6,  6,  14)           # unified dark, no header box
-COLOR_A     = (0,  230, 255)          # cyan  — algorithm A
-COLOR_B     = (255, 45, 120)          # pink  — algorithm B
-COLOR_ACTIVE = (255, 255, 200)        # warm white — highlighted bars
-COLOR_GOLD  = (255, 200, 0)
-COLOR_TEXT  = (200, 215, 240)
-COLOR_SUB   = (70, 80, 110)
-COLOR_DIV   = (28, 28, 52)
+BG           = (5,   5,   8)
+COLOR_A      = (0,  220, 110)         # terminal green
+COLOR_B      = (255,  65,  65)        # error red
+COLOR_ACTIVE = (255, 255, 255)        # white flash on active bars
+COLOR_TITLE  = (220, 220, 230)        # off-white title
+COLOR_SUB    = (55,  58,  78)         # dark label
+COLOR_DIV    = (18,  18,  26)         # near-invisible divider
 
-HUE_A = 185.0   # cyan hue
-HUE_B = 330.0   # pink hue
+HUE_A = 142.0   # green
+HUE_B =   0.0   # red
 
-# ─── Fonts ────────────────────────────────────────────────────────────────────
+# ─── Fonts (monospace first) ──────────────────────────────────────────────────
 _BOLD_PATHS = [
-    "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "/usr/share/fonts/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/TTF/JetBrainsMono-Bold.ttf",
+    "/usr/share/fonts/truetype/JetBrainsMono/JetBrainsMono-Bold.ttf",
+    "/usr/share/fonts/TTF/DejaVuSansMono-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+    "C:/Windows/Fonts/consolab.ttf",
     "C:/Windows/Fonts/arialbd.ttf",
 ]
 _REG_PATHS = [
-    "/usr/share/fonts/TTF/DejaVuSans.ttf",
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/TTF/JetBrainsMono-Regular.ttf",
+    "/usr/share/fonts/truetype/JetBrainsMono/JetBrainsMono-Regular.ttf",
+    "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+    "C:/Windows/Fonts/consola.ttf",
     "C:/Windows/Fonts/arial.ttf",
 ]
 
@@ -121,10 +123,9 @@ def _draw_bars(draw: ImageDraw.Draw, array: list, active: set,
 
 
 def _draw_stats(draw: ImageDraw.Draw, cx: int, y: int,
-                color: tuple, comp: int, leading: bool) -> None:
-    num_text = f"{comp:,}"
-    _centered(draw, cx, y, num_text, _font(96), color)
-    _centered(draw, cx, y + 108, "comparisons", _font(34, bold=False), COLOR_SUB)
+                color: tuple, comp: int) -> None:
+    _centered(draw, cx, y, f"{comp:,}", _font(96), color)
+    _centered(draw, cx, y + 110, "ops", _font(36, bold=False), COLOR_SUB)
 
 
 # ─── Frame renderer ───────────────────────────────────────────────────────────
@@ -144,28 +145,32 @@ def render_frame(
     leading_b = (not done_a and not done_b and progress_b > progress_a) or (done_b and not done_a)
 
     # ── Header ────────────────────────────────────────────────────────────────
-    _centered(draw, W // 2, 36, "SORT WARS", _font(88), COLOR_GOLD)
+    _centered(draw, W // 2, 38, "sort_wars", _font(82), COLOR_TITLE)
 
     # ── Name plates ───────────────────────────────────────────────────────────
     cx_a = (L_X1 + L_X2) // 2
     cx_b = (R_X1 + R_X2) // 2
-    name_y = HEADER_H + 18
+    name_y = HEADER_H + 20
 
-    # Algorithm names
-    _centered(draw, cx_a, name_y, name_a.upper(), _font(52), COLOR_A)
-    _centered(draw, cx_b, name_y, name_b.upper(), _font(52), COLOR_B)
-    _centered(draw, W // 2, name_y + 14, "VS", _font(36, bold=False), COLOR_SUB)
+    slug_a = name_a.lower().replace(" ", "_")
+    slug_b = name_b.lower().replace(" ", "_")
 
-    # Leading indicator — small pill under the name
-    pill_y = name_y + 78
-    for cx, leading, color in [(cx_a, leading_a, COLOR_A), (cx_b, leading_b, COLOR_B)]:
+    _centered(draw, cx_a, name_y, slug_a, _font(50), COLOR_A)
+    _centered(draw, cx_b, name_y, slug_b, _font(50), COLOR_B)
+    _centered(draw, W // 2, name_y + 16, "vs", _font(32, bold=False), COLOR_SUB)
+
+    # Winning indicator — thin underline under leading name
+    lead_y = name_y + 76
+    for cx, slug, leading, color in [
+        (cx_a, slug_a, leading_a, COLOR_A),
+        (cx_b, slug_b, leading_b, COLOR_B),
+    ]:
         if leading:
-            label = "WINNING"
-            bb = draw.textbbox((0, 0), label, font=_font(30))
-            bw = bb[2] - bb[0] + 28
-            bx = cx - bw // 2
-            draw.rounded_rectangle([(bx, pill_y), (bx + bw, pill_y + 44)], radius=10, fill=color)
-            _centered(draw, cx, pill_y + 7, label, _font(30), BG)
+            bb = draw.textbbox((0, 0), slug, font=_font(50))
+            nw = bb[2] - bb[0]
+            ux = cx - nw // 2
+            draw.rounded_rectangle([(ux, lead_y), (ux + nw, lead_y + 5)], radius=2, fill=color)
+            _centered(draw, cx, lead_y + 14, "winning", _font(28, bold=False), color)
 
     # ── Divider ───────────────────────────────────────────────────────────────
     draw.rectangle([(DIV_X1, CHART_TOP), (DIV_X2, CHART_BOTTOM)], fill=COLOR_DIV)
@@ -176,20 +181,20 @@ def render_frame(
 
     # ── Status banners ────────────────────────────────────────────────────────
     if done_a:
-        label = "WINNER!" if winner == name_a else "SORTED"
-        clr   = COLOR_GOLD if winner == name_a else COLOR_A
-        _centered(draw, (L_X1 + L_X2) // 2, CHART_TOP + 14, label, _font(50), clr)
+        label = "winner" if winner == name_a else "sorted"
+        clr   = COLOR_A
+        _centered(draw, (L_X1 + L_X2) // 2, CHART_TOP + 14, label, _font(46, bold=False), clr)
     if done_b:
-        label = "WINNER!" if winner == name_b else "SORTED"
-        clr   = COLOR_GOLD if winner == name_b else COLOR_B
-        _centered(draw, (R_X1 + R_X2) // 2, CHART_TOP + 14, label, _font(50), clr)
+        label = "winner" if winner == name_b else "sorted"
+        clr   = COLOR_B
+        _centered(draw, (R_X1 + R_X2) // 2, CHART_TOP + 14, label, _font(46, bold=False), clr)
 
     # ── Stats panel ───────────────────────────────────────────────────────────
     draw.rectangle([(0, STATS_TOP), (W, STATS_TOP + 2)], fill=COLOR_DIV)
 
-    stats_y = STATS_TOP + 22
-    _draw_stats(draw, (L_X1 + L_X2) // 2, stats_y, COLOR_A, comp_a, leading_a)
-    _draw_stats(draw, (R_X1 + R_X2) // 2, stats_y, COLOR_B, comp_b, leading_b)
+    stats_y = STATS_TOP + 26
+    _draw_stats(draw, (L_X1 + L_X2) // 2, stats_y, COLOR_A, comp_a)
+    _draw_stats(draw, (R_X1 + R_X2) // 2, stats_y, COLOR_B, comp_b)
 
     return img
 
