@@ -28,33 +28,32 @@ W, H = 1080, 1920
 FPS  = 60
 
 # ─── Layout — vertical stacking (A above B) ───────────────────────────────────
-PAD_TOP     = 100
 PAD_SIDE    = 110
-TITLE_H     = 65
 
-A_HEADER_H  = 215
-A_CHART_H   = 400
+A_HEADER_H  = 195
+A_CHART_H   = 440
+VS_H        = 110
+B_HEADER_H  = 195
+B_CHART_H   = 440
 
-VS_H        = 60                            # tight — brings sections close together
-
-B_HEADER_H  = 215
-B_CHART_H   = 400
+# Center content vertically — PAD_TOP = PAD_BOT automatically
+_CONTENT_H  = A_HEADER_H + A_CHART_H + VS_H + B_HEADER_H + B_CHART_H  # 1380
+PAD_TOP     = (H - _CONTENT_H) // 2                                     # 270
 
 # Derived Y positions
-A_HEADER_Y  = PAD_TOP + TITLE_H                  # 165
-A_CHART_Y   = A_HEADER_Y + A_HEADER_H            # 380
-A_CHART_BOT = A_CHART_Y + A_CHART_H              # 780
+A_HEADER_Y  = PAD_TOP
+A_CHART_Y   = A_HEADER_Y + A_HEADER_H
+A_CHART_BOT = A_CHART_Y + A_CHART_H
 
-VS_Y        = A_CHART_BOT                         # 780
-VS_BOT      = VS_Y + VS_H                         # 840
+VS_Y        = A_CHART_BOT
+VS_BOT      = VS_Y + VS_H
 
-B_HEADER_Y  = VS_BOT                              # 840
-B_CHART_Y   = B_HEADER_Y + B_HEADER_H            # 1055
-B_CHART_BOT = B_CHART_Y + B_CHART_H              # 1455
-# bottom margin: 1920 - 1455 = 465px
+B_HEADER_Y  = VS_BOT
+B_CHART_Y   = B_HEADER_Y + B_HEADER_H
+B_CHART_BOT = B_CHART_Y + B_CHART_H
 
-CHART_X1    = PAD_SIDE                            # 110
-CHART_X2    = W - PAD_SIDE                        # 970
+CHART_X1    = PAD_SIDE
+CHART_X2    = W - PAD_SIDE
 BAR_MAX_FRAC = 0.58
 
 # ─── Palette ──────────────────────────────────────────────────────────────────
@@ -193,9 +192,6 @@ def render_frame(
 
     leading_a = (not done_a and not done_b and progress_a > progress_b) or (done_a and not done_b)
     leading_b = (not done_a and not done_b and progress_b > progress_a) or (done_b and not done_a)
-
-    # ── Title ─────────────────────────────────────────────────────────────────
-    _centered(draw, W // 2, PAD_TOP + 6, "sort_wars", _font(52, bold=False), COLOR_SUB)
 
     # ── Algo A header ─────────────────────────────────────────────────────────
     _draw_algo_header(draw, A_HEADER_Y, name_a, comp_a, COLOR_A, leading_a, done_a, winner or "")
