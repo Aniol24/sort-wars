@@ -88,19 +88,26 @@ _REG_PATHS = [
 ]
 
 _font_cache: dict = {}
+_font_warned = False
 
 def _font(size: int, bold: bool = True) -> ImageFont.FreeTypeFont:
+    global _font_warned
     key = (size, bold)
     if key not in _font_cache:
         paths = _BOLD_PATHS if bold else _REG_PATHS
-        font = ImageFont.load_default()
+        loaded = None
         for p in paths:
             try:
-                font = ImageFont.truetype(p, size)
+                loaded = ImageFont.truetype(p, size)
                 break
             except (IOError, OSError):
                 pass
-        _font_cache[key] = font
+        if loaded is None:
+            if not _font_warned:
+                print("WARNING: no TTF font found — install ttf-dejavu: sudo pacman -S ttf-dejavu")
+                _font_warned = True
+            loaded = ImageFont.load_default()
+        _font_cache[key] = loaded
     return _font_cache[key]
 
 
