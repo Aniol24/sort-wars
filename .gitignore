@@ -22,6 +22,9 @@ build/
 .DS_Store
 Thumbs.db
 
+# Virtual env
+.venv/
+
 # IDE
 .vscode/
 .idea/
