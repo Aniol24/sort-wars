@@ -28,35 +28,34 @@ W, H = 1080, 1920
 FPS  = 60
 
 # ─── Layout — vertical stacking (A above B) ───────────────────────────────────
-PAD_TOP     = 130                           # top breathing room
-PAD_SIDE    = 130                           # left/right padding
-PAD_BOT     = 130                           # bottom breathing room
-TITLE_H     = 80
+PAD_TOP     = 100
+PAD_SIDE    = 110
+TITLE_H     = 65
 
-A_HEADER_H  = 185
-A_CHART_H   = 430
+A_HEADER_H  = 215
+A_CHART_H   = 400
 
-VS_H        = 110
+VS_H        = 60                            # tight — brings sections close together
 
-B_HEADER_H  = 185
-B_CHART_H   = 430
+B_HEADER_H  = 215
+B_CHART_H   = 400
 
 # Derived Y positions
-A_HEADER_Y  = PAD_TOP + TITLE_H                  # 210
-A_CHART_Y   = A_HEADER_Y + A_HEADER_H            # 395
-A_CHART_BOT = A_CHART_Y + A_CHART_H              # 825
+A_HEADER_Y  = PAD_TOP + TITLE_H                  # 165
+A_CHART_Y   = A_HEADER_Y + A_HEADER_H            # 380
+A_CHART_BOT = A_CHART_Y + A_CHART_H              # 780
 
-VS_Y        = A_CHART_BOT                         # 825
-VS_BOT      = VS_Y + VS_H                         # 935
+VS_Y        = A_CHART_BOT                         # 780
+VS_BOT      = VS_Y + VS_H                         # 840
 
-B_HEADER_Y  = VS_BOT                              # 935
-B_CHART_Y   = B_HEADER_Y + B_HEADER_H            # 1120
-B_CHART_BOT = B_CHART_Y + B_CHART_H              # 1550
-# bottom margin: 1920 - 1550 = 370px (> PAD_BOT ✓)
+B_HEADER_Y  = VS_BOT                              # 840
+B_CHART_Y   = B_HEADER_Y + B_HEADER_H            # 1055
+B_CHART_BOT = B_CHART_Y + B_CHART_H              # 1455
+# bottom margin: 1920 - 1455 = 465px
 
-CHART_X1    = PAD_SIDE                            # 130
-CHART_X2    = W - PAD_SIDE                        # 950
-BAR_MAX_FRAC = 0.58                               # bars cap at 58% of panel height
+CHART_X1    = PAD_SIDE                            # 110
+CHART_X2    = W - PAD_SIDE                        # 970
+BAR_MAX_FRAC = 0.58
 
 # ─── Palette ──────────────────────────────────────────────────────────────────
 BG           = (5,   5,   8)
@@ -146,18 +145,18 @@ def _draw_algo_header(draw: ImageDraw.Draw, y: int, name: str, comp: int,
     cx = W // 2
     slug = name.lower().replace(" ", "_")
 
-    _centered(draw, cx, y + 10, slug, _font(74), color)
+    _centered(draw, cx, y + 8, slug, _font(92), color)
 
     if done:
         label = "[ winner ]" if winner == name else "[ sorted ]"
-        _centered(draw, cx, y + 110, label, _font(44, bold=False), color)
+        _centered(draw, cx, y + 124, label, _font(52, bold=False), color)
     else:
-        _centered(draw, cx, y + 110, f"{comp:,} ops", _font(50, bold=False), color)
+        _centered(draw, cx, y + 124, f"{comp:,} ops", _font(58, bold=False), color)
         if leading:
-            bb = draw.textbbox((0, 0), slug, font=_font(74))
+            bb = draw.textbbox((0, 0), slug, font=_font(92))
             nw = bb[2] - bb[0]
             ux = cx - nw // 2
-            draw.rounded_rectangle([(ux, y + 94), (ux + nw, y + 99)], radius=2, fill=color)
+            draw.rounded_rectangle([(ux, y + 110), (ux + nw, y + 115)], radius=2, fill=color)
 
 
 # ─── Frame renderer ───────────────────────────────────────────────────────────
@@ -177,7 +176,7 @@ def render_frame(
     leading_b = (not done_a and not done_b and progress_b > progress_a) or (done_b and not done_a)
 
     # ── Title ─────────────────────────────────────────────────────────────────
-    _centered(draw, W // 2, PAD_TOP + 8, "sort_wars", _font(62, bold=False), COLOR_SUB)
+    _centered(draw, W // 2, PAD_TOP + 6, "sort_wars", _font(52, bold=False), COLOR_SUB)
 
     # ── Algo A header ─────────────────────────────────────────────────────────
     _draw_algo_header(draw, A_HEADER_Y, name_a, comp_a, COLOR_A, leading_a, done_a, winner or "")
@@ -189,7 +188,7 @@ def render_frame(
     mid_y = VS_Y + VS_H // 2
     draw.rectangle([(40, mid_y - 1), (W // 2 - 70, mid_y + 1)], fill=COLOR_DIV)
     draw.rectangle([(W // 2 + 70, mid_y - 1), (W - 40, mid_y + 1)], fill=COLOR_DIV)
-    _centered(draw, W // 2, mid_y - 30, "vs", _font(52, bold=False), COLOR_SUB)
+    _centered(draw, W // 2, mid_y - 26, "vs", _font(44, bold=False), COLOR_SUB)
 
     # ── Algo B header ─────────────────────────────────────────────────────────
     _draw_algo_header(draw, B_HEADER_Y, name_b, comp_b, COLOR_B, leading_b, done_b, winner or "")
