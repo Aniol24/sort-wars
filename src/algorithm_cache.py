@@ -8,7 +8,7 @@ Provides a pool of algorithms to pick from for each video duel.
 import json
 import os
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -321,7 +321,7 @@ def seed_database(force: bool = False) -> int:
     """Insert seed algorithms. Skips existing names. Returns count inserted."""
     conn = _connect()
     inserted = 0
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     for algo in _SEED_ALGORITHMS:
         try:
             conn.execute(
@@ -343,7 +343,7 @@ def seed_database(force: bool = False) -> int:
 def save_algorithm(name: str, description: str, code: str) -> int:
     """Save a generated algorithm. Returns its row id."""
     conn = _connect()
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     try:
         cur = conn.execute(
             "INSERT INTO algorithms (name, description, code, created_at) VALUES (?, ?, ?, ?)",
