@@ -1,0 +1,9 @@
+anthropic>=0.34
+matplotlib>=3.8
+numpy>=1.26
+scipy>=1.11
+Pillow>=10.0
+ffmpeg-python>=0.2.0
+playwright>=1.40
+schedule>=1.2
+python-dotenv>=1.0

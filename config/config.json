@@ -1,0 +1,29 @@
+{
+  "video": {
+    "width": 1080,
+    "height": 1920,
+    "fps": 60,
+    "duration_seconds": 60,
+    "array_size": 64
+  },
+  "audio": {
+    "sample_rate": 44100,
+    "base_frequency": 200,
+    "max_frequency": 2000
+  },
+  "schedule": {
+    "times": ["09:00", "20:00"],
+    "videos_per_run": 1
+  },
+  "tiktok": {
+    "hashtags": [
+      "#sortingalgorithm", "#coding", "#algorithm",
+      "#programming", "#cs", "#computerscience",
+      "#techtok", "#learnontiktok"
+    ]
+  },
+  "algorithms": {
+    "seed_count": 10,
+    "min_pool_size": 5
+  }
+}
