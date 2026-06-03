@@ -28,31 +28,35 @@ W, H = 1080, 1920
 FPS  = 60
 
 # ─── Layout — vertical stacking (A above B) ───────────────────────────────────
-TITLE_H     = 110
+PAD_TOP     = 130                           # top breathing room
+PAD_SIDE    = 130                           # left/right padding
+PAD_BOT     = 130                           # bottom breathing room
+TITLE_H     = 80
 
-A_HEADER_H  = 200
-A_CHART_H   = 570
+A_HEADER_H  = 185
+A_CHART_H   = 430
 
-VS_H        = 120
+VS_H        = 110
 
-B_HEADER_H  = 200
-B_CHART_H   = 570
+B_HEADER_H  = 185
+B_CHART_H   = 430
 
 # Derived Y positions
-A_HEADER_Y  = TITLE_H                      # 110
-A_CHART_Y   = A_HEADER_Y + A_HEADER_H      # 310
-A_CHART_BOT = A_CHART_Y + A_CHART_H        # 880
+A_HEADER_Y  = PAD_TOP + TITLE_H                  # 210
+A_CHART_Y   = A_HEADER_Y + A_HEADER_H            # 395
+A_CHART_BOT = A_CHART_Y + A_CHART_H              # 825
 
-VS_Y        = A_CHART_BOT                   # 880
-VS_BOT      = VS_Y + VS_H                   # 1000
+VS_Y        = A_CHART_BOT                         # 825
+VS_BOT      = VS_Y + VS_H                         # 935
 
-B_HEADER_Y  = VS_BOT                        # 1000
-B_CHART_Y   = B_HEADER_Y + B_HEADER_H      # 1200
-B_CHART_BOT = B_CHART_Y + B_CHART_H        # 1770
-# bottom margin: 1920 - 1770 = 150px
+B_HEADER_Y  = VS_BOT                              # 935
+B_CHART_Y   = B_HEADER_Y + B_HEADER_H            # 1120
+B_CHART_BOT = B_CHART_Y + B_CHART_H              # 1550
+# bottom margin: 1920 - 1550 = 370px (> PAD_BOT ✓)
 
-CHART_X1, CHART_X2 = 24, 1056              # full-width panels
-BAR_MAX_FRAC = 0.65                         # bars cap at 65% of panel height
+CHART_X1    = PAD_SIDE                            # 130
+CHART_X2    = W - PAD_SIDE                        # 950
+BAR_MAX_FRAC = 0.58                               # bars cap at 58% of panel height
 
 # ─── Palette ──────────────────────────────────────────────────────────────────
 BG           = (5,   5,   8)
@@ -173,7 +177,7 @@ def render_frame(
     leading_b = (not done_a and not done_b and progress_b > progress_a) or (done_b and not done_a)
 
     # ── Title ─────────────────────────────────────────────────────────────────
-    _centered(draw, W // 2, 28, "sort_wars", _font(68, bold=False), COLOR_SUB)
+    _centered(draw, W // 2, PAD_TOP + 8, "sort_wars", _font(62, bold=False), COLOR_SUB)
 
     # ── Algo A header ─────────────────────────────────────────────────────────
     _draw_algo_header(draw, A_HEADER_Y, name_a, comp_a, COLOR_A, leading_a, done_a, winner or "")
@@ -205,7 +209,7 @@ def _run_algorithm(code: str, array: list) -> list:
     return list(ns["sort"](array))
 
 
-def _make_array(size: int = 64, distribution: str = "random") -> list:
+def _make_array(size: int = 32, distribution: str = "random") -> list:
     arr = list(range(1, size + 1))
     if distribution == "random":
         random.shuffle(arr)
@@ -333,7 +337,7 @@ def _cli():
     parser.add_argument("mode", choices=["preview", "video"], nargs="?", default="preview")
     parser.add_argument("--algo-a", default=None, help="Algorithm name (uses cache if not set)")
     parser.add_argument("--algo-b", default=None, help="Algorithm name (uses cache if not set)")
-    parser.add_argument("--size",   type=int, default=64)
+    parser.add_argument("--size",   type=int, default=32)
     parser.add_argument("--dist",   default="random", choices=["random", "reversed", "nearly_sorted", "sawtooth"])
     parser.add_argument("--at",     type=float, default=0.5, help="Preview fraction (0-1)")
     parser.add_argument("--output", default=None)
