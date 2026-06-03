@@ -30,15 +30,15 @@ FPS  = 60
 # ─── Layout — vertical stacking (A above B) ───────────────────────────────────
 PAD_SIDE    = 110
 
-A_HEADER_H  = 230
-A_CHART_H   = 420
+A_HEADER_H  = 270
+A_CHART_H   = 400
 VS_H        = 110
-B_HEADER_H  = 230
-B_CHART_H   = 420
+B_HEADER_H  = 270
+B_CHART_H   = 400
 
 # Center content vertically — PAD_TOP = PAD_BOT automatically
-_CONTENT_H  = A_HEADER_H + A_CHART_H + VS_H + B_HEADER_H + B_CHART_H  # 1410
-PAD_TOP     = (H - _CONTENT_H) // 2                                     # 255
+_CONTENT_H  = A_HEADER_H + A_CHART_H + VS_H + B_HEADER_H + B_CHART_H  # 1450
+PAD_TOP     = (H - _CONTENT_H) // 2                                     # 235
 
 # Derived Y positions
 A_HEADER_Y  = PAD_TOP
@@ -182,15 +182,25 @@ def _draw_algo_header(draw: ImageDraw.Draw, y: int, name: str, desc: str, comp: 
     else:
         _centered(draw, cx, ops_y, f"{comp:,} ops", _font(ops_size, bold=False), color)
 
-    # One-line description — shrink font until it fits
+    # Multi-line description (up to 3 lines), word-wrapped
     if desc:
-        short = desc if len(desc) <= 60 else desc[:57] + "..."
-        while desc_size > 18:
-            bb = draw.textbbox((0, 0), short, font=_font(desc_size, bold=False))
+        f_desc = _font(desc_size, bold=False)
+        words  = desc.split()
+        lines: list = []
+        current = ""
+        for word in words:
+            test = (current + " " + word).strip()
+            bb = draw.textbbox((0, 0), test, font=f_desc)
             if (bb[2] - bb[0]) <= max_w:
-                break
-            desc_size -= 2
-        _centered(draw, cx, desc_y, short, _font(desc_size, bold=False), COLOR_DESC)
+                current = test
+            else:
+                if current:
+                    lines.append(current)
+                current = word
+        if current:
+            lines.append(current)
+        for i, line in enumerate(lines[:3]):
+            _centered(draw, cx, desc_y + i * (desc_size + 5), line, f_desc, COLOR_DESC)
 
 
 # ─── Frame renderer ───────────────────────────────────────────────────────────
