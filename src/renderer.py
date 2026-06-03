@@ -249,11 +249,12 @@ def render_video(
     algo_a: dict, algo_b: dict,
     array: Optional[list] = None,
     output_path: str = "output/duel.mp4",
+    with_audio: bool = True,
 ) -> str:
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
     if array is None:
-        array = _make_array(64, "random")
+        array = _make_array(32, "random")
 
     print(f"Running {algo_a['name']}...")
     states_a = _run_algorithm(algo_a["code"], array)
@@ -267,6 +268,8 @@ def render_video(
 
     print(f"Rendering {total_frames} frames ({total_frames / FPS:.1f}s) -> {output_path}")
 
+    silent_path = output_path.replace(".mp4", "_silent.mp4") if with_audio else output_path
+
     cmd = [
         "ffmpeg", "-y",
         "-f", "rawvideo", "-vcodec", "rawvideo",
@@ -275,7 +278,7 @@ def render_video(
         "-i", "pipe:0",
         "-vcodec", "libx264", "-pix_fmt", "yuv420p",
         "-crf", "23", "-preset", "fast",
-        output_path,
+        silent_path,
     ]
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -305,6 +308,14 @@ def render_video(
     finally:
         proc.stdin.close()
         proc.wait()
+
+    if with_audio:
+        from src.audio_engine import generate_audio, merge_video_audio
+        wav_path = output_path.replace(".mp4", ".wav")
+        generate_audio(states_a, states_b, n_celebration_frames=FPS * 3, output_wav=wav_path)
+        merge_video_audio(silent_path, wav_path, output_path)
+        Path(silent_path).unlink(missing_ok=True)
+        Path(wav_path).unlink(missing_ok=True)
 
     print(f"Done: {output_path}")
     return output_path
