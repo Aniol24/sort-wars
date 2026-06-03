@@ -280,7 +280,7 @@ def render_video(
         "-crf", "23", "-preset", "fast",
         silent_path,
     ]
-    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL)
 
     try:
         for f in range(total_frames):
