@@ -57,16 +57,14 @@ CHART_X2    = W - PAD_SIDE
 BAR_MAX_FRAC = 0.58
 
 # ─── Palette ──────────────────────────────────────────────────────────────────
-BG           = (5,   5,   8)
-COLOR_A      = (0,  220, 110)         # terminal green
-COLOR_B      = (255,  65,  65)        # error red
-COLOR_ACTIVE = (255, 255, 255)        # white flash on active bars
-COLOR_TITLE  = (220, 220, 230)        # off-white title
-COLOR_SUB    = (55,  58,  78)         # dark label
-COLOR_DIV    = (18,  18,  26)         # near-invisible divider
+BG        = (4,   4,  12)            # deep navy-black
+COLOR_A   = (0,  255, 140)           # vivid mint green
+COLOR_B   = (255,  60,  90)          # vivid coral-red
+COLOR_SUB = (58,  62,  92)           # muted blue-gray
+COLOR_DIV = (22,  22,  44)           # subtle blue-tinted line
 
-HUE_A = 142.0   # green
-HUE_B =   0.0   # red
+HUE_A = 148.0
+HUE_B = 348.0   # coral-red hue
 
 # ─── Fonts (monospace first) ──────────────────────────────────────────────────
 _BOLD_PATHS = [
@@ -114,9 +112,11 @@ def _font(size: int, bold: bool = True) -> ImageFont.FreeTypeFont:
 
 def _bar_color(value: int, max_val: int, hue: float, active: bool) -> tuple:
     if active:
-        return COLOR_ACTIVE
-    brightness = 0.20 + 0.80 * (value / max_val)
-    r, g, b = colorsys.hsv_to_rgb(hue / 360, 0.90, brightness)
+        # bright version of the algorithm color, not plain white
+        r, g, b = colorsys.hsv_to_rgb(hue / 360, 0.35, 1.0)
+        return (int(r * 255), int(g * 255), int(b * 255))
+    brightness = 0.18 + 0.82 * (value / max_val)
+    r, g, b = colorsys.hsv_to_rgb(hue / 360, 0.92, brightness)
     return (int(r * 255), int(g * 255), int(b * 255))
 
 
@@ -134,16 +134,17 @@ def _draw_bars(draw: ImageDraw.Draw, array: list, active: set,
     max_v = max(array)
     if max_v == 0:
         max_v = 1
-    cw = x2 - x1
-    ch = int((y_bot - y_top) * BAR_MAX_FRAC)   # cap bar height
-    bw = cw / n
+    cw   = x2 - x1
+    ch   = int((y_bot - y_top) * BAR_MAX_FRAC)
+    slot = cw / n
+    gap  = max(1, int(slot * 0.12))             # ~12% gap between bars
 
     for i, v in enumerate(array):
-        bx1 = int(x1 + i * bw)
-        bx2 = max(bx1 + 1, int(x1 + (i + 1) * bw) - 1)
-        bh  = max(2, int(ch * v / max_v))
+        bx1   = int(x1 + i * slot) + gap
+        bx2   = max(bx1 + 2, int(x1 + (i + 1) * slot) - gap)
+        bh    = max(3, int(ch * v / max_v))
         color = _bar_color(v, max_v, hue, i in active)
-        draw.rectangle([(bx1, y_bot - bh), (bx2, y_bot)], fill=color)
+        draw.rounded_rectangle([(bx1, y_bot - bh), (bx2, y_bot)], radius=3, fill=color)
 
 
 def _draw_algo_header(draw: ImageDraw.Draw, y: int, name: str, comp: int,
@@ -199,11 +200,14 @@ def render_frame(
     # ── Algo A bars ───────────────────────────────────────────────────────────
     _draw_bars(draw, arr_a, set(active_a), HUE_A, CHART_X1, CHART_X2, A_CHART_Y, A_CHART_BOT)
 
-    # ── VS divider ────────────────────────────────────────────────────────────
-    mid_y = VS_Y + VS_H // 2
-    draw.rectangle([(40, mid_y - 1), (W // 2 - 70, mid_y + 1)], fill=COLOR_DIV)
-    draw.rectangle([(W // 2 + 70, mid_y - 1), (W - 40, mid_y + 1)], fill=COLOR_DIV)
-    _centered(draw, W // 2, mid_y - 26, "vs", _font(44, bold=False), COLOR_SUB)
+    # ── VS divider — lines + circle badge ────────────────────────────────────
+    mid_y  = VS_Y + VS_H // 2
+    cr     = 38                                  # circle radius
+    cx_vs  = W // 2
+    draw.rectangle([(CHART_X1, mid_y - 1), (cx_vs - cr - 10, mid_y + 1)], fill=COLOR_DIV)
+    draw.rectangle([(cx_vs + cr + 10, mid_y - 1), (CHART_X2, mid_y + 1)], fill=COLOR_DIV)
+    draw.ellipse([(cx_vs - cr, mid_y - cr), (cx_vs + cr, mid_y + cr)], outline=COLOR_DIV, width=2)
+    _centered(draw, cx_vs, mid_y - 22, "vs", _font(38, bold=False), COLOR_SUB)
 
     # ── Algo B header ─────────────────────────────────────────────────────────
     _draw_algo_header(draw, B_HEADER_Y, name_b, comp_b, COLOR_B, leading_b, done_b, winner or "")
