@@ -9,6 +9,8 @@ Usage:
     python tiktok_auth.py
 """
 
+import base64
+import hashlib
 import json
 import os
 import secrets
@@ -31,24 +33,35 @@ AUTH_URL   = "https://www.tiktok.com/v2/auth/authorize/"
 TOKEN_URL  = "https://open.tiktokapis.com/v2/oauth/token/"
 
 
-def build_auth_url(state: str) -> str:
+def _pkce_pair() -> tuple[str, str]:
+    verifier = secrets.token_urlsafe(64)
+    challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode()).digest()
+    ).rstrip(b"=").decode()
+    return verifier, challenge
+
+
+def build_auth_url(state: str, code_challenge: str) -> str:
     params = {
-        "client_key":     CLIENT_KEY,
-        "scope":          SCOPES,
-        "response_type":  "code",
-        "redirect_uri":   REDIRECT_URI,
-        "state":          state,
+        "client_key":            CLIENT_KEY,
+        "scope":                 SCOPES,
+        "response_type":         "code",
+        "redirect_uri":          REDIRECT_URI,
+        "state":                 state,
+        "code_challenge":        code_challenge,
+        "code_challenge_method": "S256",
     }
     return AUTH_URL + "?" + urlencode(params)
 
 
-def exchange_code(code: str) -> dict:
+def exchange_code(code: str, code_verifier: str) -> dict:
     resp = requests.post(TOKEN_URL, data={
         "client_key":     CLIENT_KEY,
         "client_secret":  CLIENT_SECRET,
         "code":           code,
         "grant_type":     "authorization_code",
         "redirect_uri":   REDIRECT_URI,
+        "code_verifier":  code_verifier,
     })
     resp.raise_for_status()
     return resp.json()
@@ -56,7 +69,8 @@ def exchange_code(code: str) -> dict:
 
 def main():
     state = secrets.token_urlsafe(16)
-    url = build_auth_url(state)
+    code_verifier, code_challenge = _pkce_pair()
+    url = build_auth_url(state, code_challenge)
 
     print("Abriendo el navegador para autorizar la app en TikTok...")
     print(f"\nSi no se abre automáticamente, ve a:\n{url}\n")
@@ -84,7 +98,7 @@ def main():
     print(f"\nCódigo obtenido: {code[:10]}...")
 
     print("Intercambiando código por token...")
-    data = exchange_code(code)
+    data = exchange_code(code, code_verifier)
 
     if "access_token" not in data:
         print(f"Error: {json.dumps(data, indent=2)}")
