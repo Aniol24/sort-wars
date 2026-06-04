@@ -34,9 +34,12 @@ TOKEN_URL  = "https://open.tiktokapis.com/v2/oauth/token/"
 
 
 def _pkce_pair() -> tuple[str, str]:
-    # plain method: challenge == verifier (no hashing)
-    verifier = secrets.token_hex(32)
-    return verifier, verifier
+    raw = secrets.token_bytes(32)
+    verifier = base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+    challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode()).digest()
+    ).rstrip(b"=").decode()
+    return verifier, challenge
 
 
 def build_auth_url(state: str, code_challenge: str) -> str:
@@ -47,20 +50,25 @@ def build_auth_url(state: str, code_challenge: str) -> str:
         "redirect_uri":          REDIRECT_URI,
         "state":                 state,
         "code_challenge":        code_challenge,
-        "code_challenge_method": "plain",
+        "code_challenge_method": "S256",
     }
     return AUTH_URL + "?" + urlencode(params)
 
 
 def exchange_code(code: str, code_verifier: str) -> dict:
-    resp = requests.post(TOKEN_URL, data={
+    body = {
         "client_key":     CLIENT_KEY,
         "client_secret":  CLIENT_SECRET,
         "code":           code,
         "grant_type":     "authorization_code",
         "redirect_uri":   REDIRECT_URI,
         "code_verifier":  code_verifier,
-    })
+    }
+    print(f"  [debug] code_verifier ({len(code_verifier)} chars): {code_verifier[:20]}...")
+    resp = requests.post(
+        TOKEN_URL, data=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
     resp.raise_for_status()
     return resp.json()
 
