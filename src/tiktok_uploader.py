@@ -1,46 +1,65 @@
 """
-T6 — TikTok Uploader (Playwright)
+T6 — TikTok Uploader (Content Posting API)
 
-Uploads a video to TikTok using a persistent browser session.
-Session is saved after a one-time interactive login; subsequent runs
-are fully headless.
+Uploads a video to TikTok using the official Content Posting API.
+Requires a valid OAuth token in data/tiktok_token.json (run tiktok_auth.py first).
 
 Usage:
-    # First-time login (opens a visible browser):
-    python -m src.tiktok_uploader setup
-
-    # Upload a video:
     python -m src.tiktok_uploader upload output/duel.mp4 "Title" "#tag1 #tag2"
 """
 
 import json
-import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+import os
 
+import requests
 from dotenv import load_dotenv
-from playwright.sync_api import TimeoutError as PlaywrightTimeout
-from playwright.sync_api import sync_playwright
 
 load_dotenv()
 
-SESSION_PATH = Path(os.environ.get("TIKTOK_SESSION_FILE", "./data/tiktok_session.json"))
-LOGS_DIR     = Path(os.environ.get("LOGS_DIR", "./logs"))
-UPLOAD_LOG   = LOGS_DIR / "uploads.jsonl"
+TOKEN_PATH = Path("data/tiktok_token.json")
+LOGS_DIR   = Path(os.environ.get("LOGS_DIR", "./logs"))
+UPLOAD_LOG = LOGS_DIR / "uploads.jsonl"
 
-UPLOAD_URL   = "https://www.tiktok.com/upload?lang=en"
-MAX_ATTEMPTS = 3
+MAX_ATTEMPTS   = 3
+MAX_CHUNK_SIZE = 10 * 1024 * 1024  # 10 MB per chunk
 
-# Centralised selectors — update here when TikTok changes their UI
-_SEL = {
-    # Hidden file input on the upload page
-    "file_input":  "input[type='file']",
-    # Caption editor — only visible once the video finishes processing
-    "caption_box": "div[contenteditable='true']",
-    # Post / publish button
-    "post_btn":    "button[data-e2e='post-btn'], button:has-text('Post')",
-}
+BASE_URL    = "https://open.tiktokapis.com/v2"
+INIT_DIRECT_URL = f"{BASE_URL}/post/publish/video/init/"         # video.publish scope
+INIT_INBOX_URL  = f"{BASE_URL}/post/publish/inbox/video/init/"    # video.upload scope
+STATUS_URL      = f"{BASE_URL}/post/publish/status/fetch/"
+REFRESH_URL = f"{BASE_URL}/oauth/token/refresh/"
+
+
+# ─── Token management ─────────────────────────────────────────────────────────
+
+def _load_token() -> dict:
+    if not TOKEN_PATH.exists():
+        raise RuntimeError(
+            f"No token file at {TOKEN_PATH}. Run: python tiktok_auth.py"
+        )
+    return json.loads(TOKEN_PATH.read_text())
+
+
+def _refresh_token(token: dict) -> dict:
+    from dotenv import dotenv_values
+    env = dotenv_values()
+    body = {
+        "client_key":     env["TIKTOK_CLIENT_KEY"],
+        "client_secret":  env["TIKTOK_CLIENT_SECRET"],
+        "grant_type":     "refresh_token",
+        "refresh_token":  token["refresh_token"],
+    }
+    resp = requests.post(
+        REFRESH_URL, data=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    resp.raise_for_status()
+    new_token = resp.json()
+    TOKEN_PATH.write_text(json.dumps(new_token, indent=2))
+    return new_token
 
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
@@ -58,81 +77,120 @@ def _log(video_path: str, title: str, success: bool, error: str = "") -> None:
         f.write(json.dumps(entry) + "\n")
 
 
-# ─── Session setup ────────────────────────────────────────────────────────────
-
-def setup_session() -> None:
-    """One-time interactive login. Opens a visible browser window."""
-    SESSION_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        context = browser.new_context()
-        page = context.new_page()
-        page.goto("https://www.tiktok.com/login")
-        print("Log in to TikTok in the browser window, then press Enter here...")
-        input()
-        context.storage_state(path=str(SESSION_PATH))
-        browser.close()
-    print(f"Session saved to {SESSION_PATH}")
-
-
 # ─── Upload logic ─────────────────────────────────────────────────────────────
 
-def _do_upload(page, video_path: str, caption: str) -> None:
-    """Single upload attempt. Raises on any failure."""
-    page.goto(UPLOAD_URL, wait_until="domcontentloaded")
-    page.wait_for_timeout(2000)  # let page JS initialise
+def _init_upload(access_token: str, title: str, video_size: int, chunk_size: int, n_chunks: int) -> tuple[str, str]:
+    """Initialize upload. Uses inbox endpoint (video.upload scope). Returns (publish_id, upload_url)."""
+    resp = requests.post(
+        INIT_INBOX_URL,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type":  "application/json; charset=UTF-8",
+        },
+        json={
+            "post_info": {
+                "title":                    title,
+                "privacy_level":            "SELF_ONLY",
+                "disable_duet":             False,
+                "disable_comment":          False,
+                "disable_stitch":           False,
+                "video_cover_timestamp_ms": 1000,
+            },
+            "source_info": {
+                "source":            "FILE_UPLOAD",
+                "video_size":        video_size,
+                "chunk_size":        chunk_size,
+                "total_chunk_count": n_chunks,
+            },
+        },
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    if data.get("error", {}).get("code", "ok") != "ok":
+        raise RuntimeError(f"Init failed: {data}")
+    return data["data"]["publish_id"], data["data"]["upload_url"]
 
-    # Set the video file directly on the hidden input
-    page.locator(_SEL["file_input"]).set_input_files(video_path)
 
-    # Caption editor only becomes visible once TikTok finishes processing the video
-    page.wait_for_selector(_SEL["caption_box"], timeout=120_000)
-    page.wait_for_timeout(1000)  # let the editor fully initialise
+def _upload_chunks(upload_url: str, video_bytes: bytes, chunk_size: int) -> None:
+    total = len(video_bytes)
+    offset = 0
+    chunk_idx = 0
+    while offset < total:
+        chunk = video_bytes[offset: offset + chunk_size]
+        end   = offset + len(chunk) - 1
+        resp  = requests.put(
+            upload_url,
+            headers={
+                "Content-Range":  f"bytes {offset}-{end}/{total}",
+                "Content-Length": str(len(chunk)),
+                "Content-Type":   "video/mp4",
+            },
+            data=chunk,
+        )
+        resp.raise_for_status()
+        offset     += len(chunk)
+        chunk_idx  += 1
+        print(f"  Chunk {chunk_idx} uploaded ({offset}/{total} bytes)")
 
-    box = page.locator(_SEL["caption_box"]).first
-    box.click()
-    box.press("Control+a")          # clear any pre-filled placeholder
-    box.type(caption, delay=30)     # type at human-ish speed
 
-    page.locator(_SEL["post_btn"]).first.click()
-
-    # TikTok redirects away from /upload on successful publish
-    page.wait_for_url(lambda url: "/upload" not in url, timeout=30_000)
+def _poll_status(access_token: str, publish_id: str, timeout: int = 120) -> str:
+    """Poll until status is PUBLISH_COMPLETE or timeout. Returns final status."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        resp = requests.post(
+            STATUS_URL,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type":  "application/json; charset=UTF-8",
+            },
+            json={"publish_id": publish_id},
+        )
+        resp.raise_for_status()
+        data   = resp.json()
+        status = data.get("data", {}).get("status", "UNKNOWN")
+        print(f"  Status: {status}")
+        if status in ("PUBLISH_COMPLETE", "SEND_TO_USER_INBOX", "FAILED"):
+            return status
+        time.sleep(3)
+    return "TIMEOUT"
 
 
 def upload_video(video_path: str, title: str, hashtags: list[str]) -> bool:
-    """Upload with up to MAX_ATTEMPTS retries. Returns True on success."""
-    if not Path(video_path).exists():
+    """Upload video via Content Posting API. Returns True on success."""
+    path = Path(video_path)
+    if not path.exists():
         raise FileNotFoundError(f"Video not found: {video_path}")
-    if not SESSION_PATH.exists():
-        raise RuntimeError(
-            f"No session file at {SESSION_PATH}. "
-            "Run: python -m src.tiktok_uploader setup"
-        )
 
-    caption = title + "\n" + " ".join(hashtags)
+    caption      = title + " " + " ".join(hashtags)
+    video_bytes  = path.read_bytes()
+    video_size   = len(video_bytes)
+    chunk_size   = min(video_size, MAX_CHUNK_SIZE)
+    n_chunks     = -(-video_size // chunk_size)  # ceil division
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(storage_state=str(SESSION_PATH))
+    token = _load_token()
 
-        for attempt in range(1, MAX_ATTEMPTS + 1):
-            page = context.new_page()
-            try:
-                _do_upload(page, video_path, caption)
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            print(f"Attempt {attempt}/{MAX_ATTEMPTS}...")
+            publish_id, upload_url = _init_upload(
+                token["access_token"], caption, video_size, chunk_size, n_chunks
+            )
+            print(f"  publish_id: {publish_id}")
+            _upload_chunks(upload_url, video_bytes, chunk_size)
+            status = _poll_status(token["access_token"], publish_id)
+            if status in ("PUBLISH_COMPLETE", "SEND_TO_USER_INBOX"):
                 _log(video_path, title, success=True)
-                browser.close()
+                print(f"Uploaded successfully: {title}")
                 return True
-            except (PlaywrightTimeout, Exception) as exc:
-                err = str(exc)
-                print(f"Attempt {attempt}/{MAX_ATTEMPTS} failed: {err}")
-                page.close()
-                if attempt < MAX_ATTEMPTS:
-                    time.sleep(2 ** attempt)  # 2 s, then 4 s
-                else:
-                    _log(video_path, title, success=False, error=err)
+            raise RuntimeError(f"Publish ended with status: {status}")
+        except Exception as exc:
+            err = str(exc)
+            print(f"Attempt {attempt} failed: {err}")
+            if attempt < MAX_ATTEMPTS:
+                time.sleep(2 ** attempt)
+            else:
+                _log(video_path, title, success=False, error=err)
 
-        browser.close()
     return False
 
 
@@ -141,10 +199,8 @@ def upload_video(video_path: str, title: str, hashtags: list[str]) -> bool:
 def _cli():
     import argparse
 
-    parser = argparse.ArgumentParser(description="TikTok uploader via Playwright")
-    sub = parser.add_subparsers(dest="cmd")
-
-    sub.add_parser("setup", help="One-time interactive login")
+    parser = argparse.ArgumentParser(description="TikTok uploader via Content Posting API")
+    sub    = parser.add_subparsers(dest="cmd")
 
     up = sub.add_parser("upload", help="Upload a video")
     up.add_argument("video",    help="Path to the mp4 file")
@@ -153,11 +209,9 @@ def _cli():
 
     args = parser.parse_args()
 
-    if args.cmd == "setup":
-        setup_session()
-    elif args.cmd == "upload":
+    if args.cmd == "upload":
         ok = upload_video(args.video, args.title, args.hashtags)
-        print("Uploaded successfully" if ok else "Upload failed — check logs/uploads.jsonl")
+        print("Done" if ok else "Failed — check logs/uploads.jsonl")
     else:
         parser.print_help()
 
