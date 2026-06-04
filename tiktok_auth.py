@@ -25,7 +25,7 @@ load_dotenv()
 
 CLIENT_KEY    = os.environ["TIKTOK_CLIENT_KEY"]
 CLIENT_SECRET = os.environ["TIKTOK_CLIENT_SECRET"]
-REDIRECT_URI  = "https://localhost:8080/callback"
+REDIRECT_URI  = "http://localhost:8080/callback"
 SCOPES        = "user.info.basic,video.upload"
 TOKEN_PATH    = Path("data/tiktok_token.json")
 
