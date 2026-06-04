@@ -34,11 +34,9 @@ TOKEN_URL  = "https://open.tiktokapis.com/v2/oauth/token/"
 
 
 def _pkce_pair() -> tuple[str, str]:
-    verifier = secrets.token_hex(32)  # 64 plain hex chars — unambiguous ASCII
-    challenge = base64.urlsafe_b64encode(
-        hashlib.sha256(verifier.encode("ascii")).digest()
-    ).rstrip(b"=").decode()
-    return verifier, challenge
+    # plain method: challenge == verifier (no hashing)
+    verifier = secrets.token_hex(32)
+    return verifier, verifier
 
 
 def build_auth_url(state: str, code_challenge: str) -> str:
@@ -49,7 +47,7 @@ def build_auth_url(state: str, code_challenge: str) -> str:
         "redirect_uri":          REDIRECT_URI,
         "state":                 state,
         "code_challenge":        code_challenge,
-        "code_challenge_method": "S256",
+        "code_challenge_method": "plain",
     }
     return AUTH_URL + "?" + urlencode(params)
 
