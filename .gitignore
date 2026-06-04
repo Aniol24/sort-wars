@@ -1,6 +1,7 @@
 # Credentials & secrets
 .env
 data/tiktok_session.json
+data/tiktok_token.json
 
 # Generated content
 output/
