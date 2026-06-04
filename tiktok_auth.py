@@ -34,9 +34,9 @@ TOKEN_URL  = "https://open.tiktokapis.com/v2/oauth/token/"
 
 
 def _pkce_pair() -> tuple[str, str]:
-    verifier = secrets.token_urlsafe(64)
+    verifier = secrets.token_hex(32)  # 64 plain hex chars — unambiguous ASCII
     challenge = base64.urlsafe_b64encode(
-        hashlib.sha256(verifier.encode()).digest()
+        hashlib.sha256(verifier.encode("ascii")).digest()
     ).rstrip(b"=").decode()
     return verifier, challenge
 
