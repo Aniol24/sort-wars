@@ -2,21 +2,23 @@
 TikTok OAuth — one-time token acquisition.
 
 Run this on a machine with a browser (Windows/Mac).
-It will open TikTok's authorization page, you log in, and the
-access + refresh tokens are saved to data/tiktok_token.json.
+Opens TikTok's authorization page, captures the callback automatically
+via a local HTTP server, and saves the access + refresh tokens to
+data/tiktok_token.json.
 
 Usage:
     python tiktok_auth.py
 """
 
-import base64
 import hashlib
 import json
 import os
 import secrets
+import threading
 import webbrowser
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from urllib.parse import urlencode, urlparse, parse_qs
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import requests
 from dotenv import load_dotenv
@@ -26,85 +28,102 @@ load_dotenv()
 CLIENT_KEY    = os.environ["TIKTOK_CLIENT_KEY"]
 CLIENT_SECRET = os.environ["TIKTOK_CLIENT_SECRET"]
 REDIRECT_URI  = "http://localhost:8080/callback"
-SCOPES        = "user.info.basic,video.upload"
+SCOPES        = "user.info.basic,video.upload,video.publish"
 TOKEN_PATH    = Path("data/tiktok_token.json")
 
-AUTH_URL   = "https://www.tiktok.com/v2/auth/authorize/"
-TOKEN_URL  = "https://open.tiktokapis.com/v2/oauth/token/"
+AUTH_URL  = "https://www.tiktok.com/v2/auth/authorize/"
+TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/"
 
 
 def _pkce_pair() -> tuple[str, str]:
-    raw = secrets.token_bytes(32)
-    verifier = base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
-    challenge = base64.urlsafe_b64encode(
-        hashlib.sha256(verifier.encode()).digest()
-    ).rstrip(b"=").decode()
+    verifier = secrets.token_hex(32)  # 64 hex chars, [0-9a-f] only
+    # TikTok requires hex encoding of SHA256 (not standard base64url)
+    challenge = hashlib.sha256(verifier.encode("ascii")).hexdigest()
     return verifier, challenge
 
 
-def build_auth_url(state: str, code_challenge: str) -> str:
+def build_auth_url(state: str, challenge: str) -> str:
     params = {
         "client_key":            CLIENT_KEY,
         "scope":                 SCOPES,
         "response_type":         "code",
         "redirect_uri":          REDIRECT_URI,
         "state":                 state,
-        "code_challenge":        code_challenge,
+        "code_challenge":        challenge,
         "code_challenge_method": "S256",
     }
     return AUTH_URL + "?" + urlencode(params)
 
 
-def exchange_code(code: str, code_verifier: str) -> dict:
+def exchange_code(code: str, verifier: str) -> dict:
     body = {
-        "client_key":     CLIENT_KEY,
-        "client_secret":  CLIENT_SECRET,
-        "code":           code,
-        "grant_type":     "authorization_code",
-        "redirect_uri":   REDIRECT_URI,
-        "code_verifier":  code_verifier,
+        "client_key":    CLIENT_KEY,
+        "client_secret": CLIENT_SECRET,
+        "code":          code,
+        "grant_type":    "authorization_code",
+        "redirect_uri":  REDIRECT_URI,
+        "code_verifier": verifier,
     }
-    print(f"  [debug] code_verifier ({len(code_verifier)} chars): {code_verifier[:20]}...")
+    print(f"  [debug] verifier ({len(verifier)} chars): {verifier[:20]}...")
     resp = requests.post(
         TOKEN_URL, data=body,
         headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
-    resp.raise_for_status()
+    print(f"  [debug] status: {resp.status_code}")
     return resp.json()
+
+
+def _wait_for_callback(state: str) -> dict:
+    """Start a local HTTP server and block until TikTok redirects to it."""
+    result = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            parsed = urlparse(self.path)
+            params = parse_qs(parsed.query, keep_blank_values=True)
+            result.update({k: v[0] for k, v in params.items()})
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(
+                b"<h2>Autorizado. Puedes cerrar esta ventana.</h2>"
+            )
+
+        def log_message(self, *args):
+            pass  # suppress server logs
+
+    server = HTTPServer(("localhost", 8080), Handler)
+    server.handle_request()  # serve exactly one request then stop
+    server.server_close()
+    return result
 
 
 def main():
     state = secrets.token_urlsafe(16)
-    code_verifier, code_challenge = _pkce_pair()
-    url = build_auth_url(state, code_challenge)
+    verifier, challenge = _pkce_pair()
+    url = build_auth_url(state, challenge)
 
     print("Abriendo el navegador para autorizar la app en TikTok...")
     print(f"\nSi no se abre automáticamente, ve a:\n{url}\n")
     webbrowser.open(url)
+    print("Esperando callback en http://localhost:8080/callback ...")
 
-    print("Después de autorizar, el navegador intentará ir a:")
-    print(f"  {REDIRECT_URI}?code=...&state=...")
-    print("Dará un error de conexión (normal). Copia la URL completa de la barra del navegador.")
-    print()
-
-    raw = input("Pega aquí la URL completa: ").strip()
-
-    parsed = urlparse(raw)
-    params = parse_qs(parsed.query)
+    params = _wait_for_callback(state)
 
     if "error" in params:
         print(f"Error de TikTok: {params['error']}")
         return
 
-    if params.get("state", [None])[0] != state:
+    if params.get("state") != state:
         print("State no coincide — posible CSRF. Abortando.")
         return
 
-    code = params["code"][0]
-    print(f"\nCódigo obtenido: {code[:10]}...")
+    code = params["code"]
+    print(f"\nCódigo capturado automáticamente: {code[:10]}...")
+    print(f"  [debug] código completo ({len(code)} chars): {code}")
 
     print("Intercambiando código por token...")
-    data = exchange_code(code, code_verifier)
+    data = exchange_code(code, verifier)
 
     if "access_token" not in data:
         print(f"Error: {json.dumps(data, indent=2)}")
